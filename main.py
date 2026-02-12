@@ -519,7 +519,10 @@ async def _run_download(task_id: str, url: str, fmt: str = "mp3", bitrate: int =
                 task["status"] = "error"
                 task["error"] = f"Conversion failed: {convert_error}"
                 return
-        filename = f"{artist} - {title}.{fmt}" if artist else f"{title}.{fmt}"
+        if artist and title.lower().startswith(artist.lower()):
+            filename = f"{title}.{fmt}"
+        else:
+            filename = f"{artist} - {title}.{fmt}" if artist else f"{title}.{fmt}"
         filename_safe = re.sub(r'[<>:"/\\|?*]', '_', filename)
         task["status"] = "complete"
         task["progress"] = 100
