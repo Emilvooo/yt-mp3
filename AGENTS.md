@@ -119,7 +119,7 @@ functions or classes.
 **Function style:**
 - Use `def` / `async def` declarations (no lambdas for named functions)
 - Inner functions for SSE event streams and cleanup callbacks
-- Group related statements: no blank line between variable assignment and immediate use
+- Group related statements: no blank line between variable assignment and immediate use. Do use blank lines to separate distinct logical blocks within functions
 
 ### JavaScript (inline in `templates/index.html`)
 

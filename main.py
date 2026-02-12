@@ -69,6 +69,7 @@ async def _download_thumbnail(url: str, tmp_dir: str) -> Path | None:
     if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
         suffix = ".jpg"
     thumb_path = Path(tmp_dir) / f"thumb{suffix}"
+
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
             res = await client.get(url)
@@ -95,6 +96,7 @@ async def _download_thumbnail_fallback(url: str, tmp_dir: str) -> Path | None:
     await proc.wait()
     if proc.returncode != 0:
         return None
+
     files = [f for f in Path(tmp_dir).iterdir() if f.is_file() and f.name.startswith("thumb.")]
     if not files:
         return None
@@ -188,10 +190,19 @@ Uploader: "{uploader}"
 
 Rules:
 - Remove noise like (Official Video), (Official Audio), (Lyrics), (Music Video), [Official Music Video], (4K Remaster), (Remastered XXXX), (Official Visualizer), (Audio), [HD], [HQ], etc.
-- Keep meaningful qualifiers like (Live in ...), (feat. ...), (Remix), (Acoustic), (Deluxe), etc.
+- Keep meaningful qualifiers like (Live at ...), (feat. ...), (Remix), (Acoustic), (Deluxe), etc.
 - The artist is usually before " - " in the title, or matches the uploader/channel name
 - For compilations/mixes, the artist is usually the uploader
+- The title should NOT contain the artist name as a prefix (no "Artist - Title" in the title field)
 - Return ONLY valid JSON: {{"artist": "...", "title": "..."}}"""
+
+
+def _display_title(artist: str, title: str) -> str:
+    if not artist:
+        return title
+    if title.lower().startswith(artist.lower()):
+        return title
+    return f"{artist} - {title}"
 
 
 async def _parse_metadata(title: str, uploader: str) -> dict:
@@ -201,6 +212,7 @@ async def _parse_metadata(title: str, uploader: str) -> dict:
 
     try:
         async with httpx.AsyncClient() as client:
+
             res = await client.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}"},
@@ -236,6 +248,7 @@ def _build_ffmpeg_cmd(
     cmd.extend(["-i", audio_input])
     if thumb_path and fmt == "mp3":
         cmd.extend(["-i", str(thumb_path)])
+
     if not allow_input_seek and trim_start is not None:
         cmd.extend(["-ss", str(trim_start)])
     if trim_end is not None:
@@ -243,12 +256,14 @@ def _build_ffmpeg_cmd(
             cmd.extend(["-t", str(max(trim_end - trim_start, 0))])
         else:
             cmd.extend(["-to", str(trim_end)])
+
     if fmt == "mp3":
         cmd.extend(["-codec:a", "libmp3lame", "-b:a", f"{bitrate}k"])
     elif fmt == "aac":
         cmd.extend(["-codec:a", "aac", "-b:a", f"{bitrate}k"])
     elif fmt == "ogg":
         cmd.extend(["-codec:a", "libvorbis", "-b:a", f"{bitrate}k"])
+
     cmd.extend(["-metadata", f"title={title}", "-metadata", f"artist={artist}", "-metadata", "comment="])
     if thumb_path and fmt == "mp3":
         cmd.extend([
@@ -258,6 +273,7 @@ def _build_ffmpeg_cmd(
             "-metadata:s:v", "title=Album cover",
             "-metadata:s:v", "comment=Cover (front)",
         ])
+
     cmd.extend(["-progress", "pipe:1", str(out_path)])
     return cmd
 
@@ -265,6 +281,7 @@ def _build_ffmpeg_cmd(
 async def _drain_lines(stream, task: dict | None = None, parse_progress: bool = False) -> str:
     if stream is None:
         return ""
+
     tail: list[str] = []
     async for line in stream:
         text = line.decode(errors="replace").strip()
@@ -282,6 +299,7 @@ async def _drain_lines(stream, task: dict | None = None, parse_progress: bool = 
 async def _drain_ffmpeg_progress(stream, task: dict, effective_duration_ms: int) -> str:
     if stream is None:
         return ""
+
     tail: list[str] = []
     async for line in stream:
         text = line.decode(errors="replace").strip()
@@ -304,6 +322,7 @@ async def _probe_duration_ms(audio_path: Path) -> int:
         stdout=asyncio.subprocess.PIPE,
     )
     probe_out, _ = await probe.communicate()
+
     try:
         return int(float(probe_out.decode().strip()) * 1_000_000)
     except (ValueError, AttributeError):
@@ -323,12 +342,14 @@ async def _download_audio_file(url: str, tmp_dir: str, task: dict) -> tuple[Path
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+
     stdout_task = asyncio.create_task(_drain_lines(dl_proc.stdout, task, True))
     stderr_task = asyncio.create_task(_drain_lines(dl_proc.stderr, task, True))
     await dl_proc.wait()
     stdout_tail, stderr_tail = await asyncio.gather(stdout_task, stderr_task)
     if dl_proc.returncode != 0:
         return None, stderr_tail or stdout_tail or "Download failed"
+
     audio_files = [
         f for f in Path(tmp_dir).iterdir()
         if f.is_file()
@@ -384,10 +405,12 @@ async def _convert_from_file(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+
     stdout_task = asyncio.create_task(_drain_ffmpeg_progress(ff_proc.stdout, task, effective_duration_ms))
     stderr_task = asyncio.create_task(_drain_lines(ff_proc.stderr))
     await ff_proc.wait()
     _, stderr_tail = await asyncio.gather(stdout_task, stderr_task)
+
     if ff_proc.returncode != 0 or not out_path.exists():
         return stderr_tail or "Conversion failed"
     return None
@@ -415,6 +438,7 @@ async def _convert_from_stream(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+
     ffmpeg_cmd = _build_ffmpeg_cmd("pipe:0", out_path, fmt, bitrate, title, artist, thumb_path, None, None, False)
     ff_proc = await asyncio.create_subprocess_exec(
         *ffmpeg_cmd,
@@ -422,14 +446,17 @@ async def _convert_from_stream(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+
     pump_task = asyncio.create_task(_pump_stream(yt_proc.stdout, ff_proc.stdin))
     yt_log_task = asyncio.create_task(_drain_lines(yt_proc.stderr))
     ff_out_task = asyncio.create_task(_drain_ffmpeg_progress(ff_proc.stdout, task, effective_duration_ms))
     ff_err_task = asyncio.create_task(_drain_lines(ff_proc.stderr))
+
     yt_code = await yt_proc.wait()
     await pump_task
     ff_code = await ff_proc.wait()
     yt_tail, _, ff_err = await asyncio.gather(yt_log_task, ff_out_task, ff_err_task)
+
     if yt_code != 0:
         return yt_tail or "Download failed"
     if ff_code != 0 or not out_path.exists():
@@ -449,6 +476,7 @@ async def _run_download(task_id: str, url: str, fmt: str = "mp3", bitrate: int =
         uploader = info.get("uploader") or info.get("channel", "")
         duration_ms = int(float(info.get("duration", 0)) * 1_000_000)
         thumb_url = _pick_thumbnail_url(info)
+
         task["stage"] = "Parsing metadata..."
         parse_task = asyncio.create_task(_parse_metadata(raw_title, uploader))
         thumb_task = None
@@ -459,38 +487,46 @@ async def _run_download(task_id: str, url: str, fmt: str = "mp3", bitrate: int =
         else:
             parsed = await parse_task
             thumb_path = None
+
         title = parsed.get("title", raw_title)
         artist = parsed.get("artist", "")
+        display_title = _display_title(artist, title)
         effective_duration_ms = _effective_duration_ms(duration_ms, trim_start, trim_end)
         out_path = Path(tmp_dir) / f"output.{fmt}"
+
         if trim_start is None and trim_end is None:
             task["status"] = "converting"
             task["stage"] = "Downloading + converting..."
             task["progress"] = 0
             stream_error = await _convert_from_stream(
-                url, out_path, fmt, bitrate, title, artist, thumb_path, task, effective_duration_ms
+                url, out_path, fmt, bitrate, display_title, artist, thumb_path, task, effective_duration_ms
             )
+
             if stream_error:
                 out_path.unlink(missing_ok=True)
                 task["status"] = "downloading"
                 task["stage"] = "Retrying download..."
                 task["progress"] = 0
+
                 audio_path, download_error = await _download_audio_file(url, tmp_dir, task)
                 if download_error or audio_path is None:
                     task["status"] = "error"
                     task["error"] = f"Download failed: {download_error}"
                     return
+
                 if not duration_ms:
                     duration_ms = await _probe_duration_ms(audio_path)
                     effective_duration_ms = _effective_duration_ms(duration_ms, trim_start, trim_end)
+
                 task["status"] = "converting"
                 task["stage"] = "Converting..."
                 task["progress"] = 0
                 convert_error = await _convert_from_file(
-                    audio_path, out_path, fmt, bitrate, title, artist, thumb_path, trim_start, trim_end, task,
+                    audio_path, out_path, fmt, bitrate, display_title, artist, thumb_path, trim_start, trim_end, task,
                     effective_duration_ms,
                 )
                 audio_path.unlink(missing_ok=True)
+
                 if convert_error:
                     task["status"] = "error"
                     task["error"] = f"Conversion failed: {convert_error}"
@@ -499,37 +535,40 @@ async def _run_download(task_id: str, url: str, fmt: str = "mp3", bitrate: int =
             task["status"] = "downloading"
             task["stage"] = "Downloading..."
             task["progress"] = 0
+
             audio_path, download_error = await _download_audio_file(url, tmp_dir, task)
             if download_error or audio_path is None:
                 task["status"] = "error"
                 task["error"] = f"Download failed: {download_error}"
                 return
+
             if not duration_ms:
                 duration_ms = await _probe_duration_ms(audio_path)
                 effective_duration_ms = _effective_duration_ms(duration_ms, trim_start, trim_end)
+
             task["status"] = "converting"
             task["stage"] = "Converting..."
             task["progress"] = 0
             convert_error = await _convert_from_file(
-                audio_path, out_path, fmt, bitrate, title, artist, thumb_path, trim_start, trim_end, task,
+                audio_path, out_path, fmt, bitrate, display_title, artist, thumb_path, trim_start, trim_end, task,
                 effective_duration_ms,
             )
             audio_path.unlink(missing_ok=True)
+
             if convert_error:
                 task["status"] = "error"
                 task["error"] = f"Conversion failed: {convert_error}"
                 return
-        if artist and title.lower().startswith(artist.lower()):
-            filename = f"{title}.{fmt}"
-        else:
-            filename = f"{artist} - {title}.{fmt}" if artist else f"{title}.{fmt}"
+
+        filename = f"{display_title}.{fmt}"
         filename_safe = re.sub(r'[<>:"/\\|?*]', '_', filename)
+
         task["status"] = "complete"
         task["progress"] = 100
         task["stage"] = "Done"
         task["output_path"] = str(out_path)
         task["filename"] = filename_safe
-        task["title"] = title
+        task["title"] = display_title
         task["artist"] = artist
     except Exception as e:
         task["status"] = "error"
