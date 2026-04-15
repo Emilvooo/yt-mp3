@@ -1,0 +1,9 @@
+services:
+  yt-mp3:
+    build: .
+    container_name: yt-mp3
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8910:8000"
