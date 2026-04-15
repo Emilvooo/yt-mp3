@@ -217,7 +217,7 @@ async def _parse_metadata(title: str, uploader: str) -> dict:
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}"},
                 json={
-                    "model": "google/gemini-3-flash-preview",
+                    "model": "google/gemini-3.1-flash-lite-preview",
                     "messages": [{"role": "user", "content": METADATA_PROMPT.format(title=title, uploader=uploader)}],
                 },
                 timeout=10,
