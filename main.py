@@ -26,6 +26,7 @@ PROGRESS_RE = re.compile(r"\[download\]\s+([\d.]+)%")
 OUT_TIME_RE = re.compile(r"out_time_ms=(\d+)")
 TASK_TTL = 300
 YTDLP_AUDIO_FORMAT = "bestaudio/best"
+YTDLP_VIDEO_FORMAT = "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best[ext=mp4]/best"
 YTDLP_CONCURRENT_FRAGMENTS = "4"
 
 tasks: dict[str, dict] = {}
@@ -138,12 +139,13 @@ async def info(url: str = ""):
     })
 
 
-VALID_FORMATS = {"mp3", "aac", "ogg"}
+VALID_FORMATS = {"mp3", "aac", "ogg", "mp4"}
 VALID_BITRATES = {128, 192, 320}
 FORMAT_MIME = {
     "mp3": "audio/mpeg",
     "aac": "audio/aac",
     "ogg": "audio/ogg",
+    "mp4": "video/mp4",
 }
 
 
@@ -278,6 +280,38 @@ def _build_ffmpeg_cmd(
     return cmd
 
 
+def _build_video_ffmpeg_cmd(
+    video_input: str,
+    out_path: Path,
+    trim_start,
+    trim_end,
+    allow_input_seek: bool,
+) -> list[str]:
+    cmd = ["ffmpeg", "-y"]
+    if allow_input_seek and trim_start is not None:
+        cmd.extend(["-ss", str(trim_start)])
+    cmd.extend(["-i", video_input])
+
+    if not allow_input_seek and trim_start is not None:
+        cmd.extend(["-ss", str(trim_start)])
+    if trim_end is not None:
+        if trim_start is not None:
+            cmd.extend(["-t", str(max(trim_end - trim_start, 0))])
+        else:
+            cmd.extend(["-to", str(trim_end)])
+
+    cmd.extend([
+        "-map", "0:v:0",
+        "-map", "0:a?",
+        "-c", "copy",
+        "-movflags", "+faststart",
+        "-avoid_negative_ts", "make_zero",
+        "-progress", "pipe:1",
+        str(out_path),
+    ])
+    return cmd
+
+
 async def _drain_lines(stream, task: dict | None = None, parse_progress: bool = False) -> str:
     if stream is None:
         return ""
@@ -314,11 +348,11 @@ async def _drain_ffmpeg_progress(stream, task: dict, effective_duration_ms: int)
     return "\n".join(tail)
 
 
-async def _probe_duration_ms(audio_path: Path) -> int:
+async def _probe_duration_ms(media_path: Path) -> int:
     probe = await asyncio.create_subprocess_exec(
         "ffprobe", "-v", "quiet",
         "-show_entries", "format=duration",
-        "-of", "csv=p=0", str(audio_path),
+        "-of", "csv=p=0", str(media_path),
         stdout=asyncio.subprocess.PIPE,
     )
     probe_out, _ = await probe.communicate()
@@ -360,6 +394,72 @@ async def _download_audio_file(url: str, tmp_dir: str, task: dict) -> tuple[Path
     if not audio_files:
         return None, "No audio file found"
     return audio_files[0], None
+
+
+async def _download_video_output(url: str, out_path: Path, task: dict) -> str | None:
+    dl_proc = await asyncio.create_subprocess_exec(
+        "yt-dlp",
+        "-f", YTDLP_VIDEO_FORMAT,
+        "-N", YTDLP_CONCURRENT_FRAGMENTS,
+        "--merge-output-format", "mp4",
+        "--no-playlist",
+        "--newline",
+        "-o", str(out_path),
+        url,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout_task = asyncio.create_task(_drain_lines(dl_proc.stdout, task, True))
+    stderr_task = asyncio.create_task(_drain_lines(dl_proc.stderr, task, True))
+    await dl_proc.wait()
+    stdout_tail, stderr_tail = await asyncio.gather(stdout_task, stderr_task)
+    if dl_proc.returncode != 0:
+        return stderr_tail or stdout_tail or "Video download failed"
+
+    if not out_path.exists():
+        candidates = [
+            f for f in out_path.parent.iterdir()
+            if f.is_file() and f.suffix.lower() == ".mp4" and f.name.startswith(f"{out_path.stem}.")
+        ]
+        if candidates:
+            candidates[0].replace(out_path)
+    if not out_path.exists():
+        return stderr_tail or stdout_tail or "No video file found"
+    return None
+
+
+async def _download_video_file(url: str, tmp_dir: str, task: dict) -> tuple[Path | None, str | None]:
+    output_template = os.path.join(tmp_dir, "source.%(ext)s")
+    dl_proc = await asyncio.create_subprocess_exec(
+        "yt-dlp",
+        "-f", YTDLP_VIDEO_FORMAT,
+        "-N", YTDLP_CONCURRENT_FRAGMENTS,
+        "--merge-output-format", "mp4",
+        "--no-playlist",
+        "--newline",
+        "-o", output_template,
+        url,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout_task = asyncio.create_task(_drain_lines(dl_proc.stdout, task, True))
+    stderr_task = asyncio.create_task(_drain_lines(dl_proc.stderr, task, True))
+    await dl_proc.wait()
+    stdout_tail, stderr_tail = await asyncio.gather(stdout_task, stderr_task)
+    if dl_proc.returncode != 0:
+        return None, stderr_tail or stdout_tail or "Video download failed"
+
+    video_files = [
+        f for f in Path(tmp_dir).iterdir()
+        if f.is_file()
+        and f.suffix.lower() in {".mp4", ".m4v", ".mov", ".webm", ".mkv"}
+        and f.name.startswith("source.")
+    ]
+    if not video_files:
+        return None, "No video file found"
+    return video_files[0], None
 
 
 async def _pump_stream(src: asyncio.StreamReader | None, dst: asyncio.StreamWriter | None):
@@ -416,6 +516,31 @@ async def _convert_from_file(
     return None
 
 
+async def _trim_video_file(
+    video_path: Path,
+    out_path: Path,
+    trim_start,
+    trim_end,
+    task: dict,
+    effective_duration_ms: int,
+) -> str | None:
+    ffmpeg_cmd = _build_video_ffmpeg_cmd(str(video_path), out_path, trim_start, trim_end, True)
+    ff_proc = await asyncio.create_subprocess_exec(
+        *ffmpeg_cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout_task = asyncio.create_task(_drain_ffmpeg_progress(ff_proc.stdout, task, effective_duration_ms))
+    stderr_task = asyncio.create_task(_drain_lines(ff_proc.stderr))
+    await ff_proc.wait()
+    _, stderr_tail = await asyncio.gather(stdout_task, stderr_task)
+
+    if ff_proc.returncode != 0 or not out_path.exists():
+        return stderr_tail or "Video trim failed"
+    return None
+
+
 async def _convert_from_stream(
     url: str,
     out_path: Path,
@@ -464,6 +589,59 @@ async def _convert_from_stream(
     return None
 
 
+async def _run_video_download(task: dict, url: str, raw_title: str, duration_ms: int, trim_start, trim_end) -> None:
+    display_title = raw_title or "video"
+    effective_duration_ms = _effective_duration_ms(duration_ms, trim_start, trim_end)
+    tmp_dir = task["tmp_dir"]
+    out_path = Path(tmp_dir) / "output.mp4"
+
+    if trim_start is None and trim_end is None:
+        task["status"] = "downloading"
+        task["stage"] = "Downloading video..."
+        task["progress"] = 0
+        download_error = await _download_video_output(url, out_path, task)
+        if download_error:
+            task["status"] = "error"
+            task["error"] = f"Download failed: {download_error}"
+            return
+    else:
+        task["status"] = "downloading"
+        task["stage"] = "Downloading video..."
+        task["progress"] = 0
+
+        video_path, download_error = await _download_video_file(url, tmp_dir, task)
+        if download_error or video_path is None:
+            task["status"] = "error"
+            task["error"] = f"Download failed: {download_error}"
+            return
+
+        if not duration_ms:
+            duration_ms = await _probe_duration_ms(video_path)
+            effective_duration_ms = _effective_duration_ms(duration_ms, trim_start, trim_end)
+
+        task["status"] = "converting"
+        task["stage"] = "Trimming video..."
+        task["progress"] = 0
+        trim_error = await _trim_video_file(video_path, out_path, trim_start, trim_end, task, effective_duration_ms)
+        video_path.unlink(missing_ok=True)
+
+        if trim_error:
+            task["status"] = "error"
+            task["error"] = f"Video trim failed: {trim_error}"
+            return
+
+    filename = f"{display_title}.mp4"
+    filename_safe = re.sub(r'[<>:"/\\|?*]', '_', filename)
+
+    task["status"] = "complete"
+    task["progress"] = 100
+    task["stage"] = "Done"
+    task["output_path"] = str(out_path)
+    task["filename"] = filename_safe
+    task["title"] = display_title
+    task["artist"] = ""
+
+
 async def _run_download(task_id: str, url: str, fmt: str = "mp3", bitrate: int = 192, trim_start=None, trim_end=None):
     task = tasks[task_id]
     tmp_dir = tempfile.mkdtemp()
@@ -476,6 +654,10 @@ async def _run_download(task_id: str, url: str, fmt: str = "mp3", bitrate: int =
         uploader = info.get("uploader") or info.get("channel", "")
         duration_ms = int(float(info.get("duration", 0)) * 1_000_000)
         thumb_url = _pick_thumbnail_url(info)
+
+        if fmt == "mp4":
+            await _run_video_download(task, url, raw_title, duration_ms, trim_start, trim_end)
+            return
 
         task["stage"] = "Parsing metadata..."
         parse_task = asyncio.create_task(_parse_metadata(raw_title, uploader))

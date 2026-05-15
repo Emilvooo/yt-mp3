@@ -3,23 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YT to MP3 — Convert YouTube Videos to MP3 Online</title>
-    <meta name="description" content="Convert YouTube videos to high-quality MP3, AAC or OGG. Choose bitrate, trim audio, and download instantly. Free, fast, no ads.">
+    <title>YT to MP3/MP4 — Convert YouTube Videos Online</title>
+    <meta name="description" content="Convert YouTube videos to high-quality MP3, AAC, OGG or MP4. Choose bitrate, trim media, and download instantly. Free, fast, no ads.">
     <link rel="canonical" href="https://yt2mp3.emilvooo.nl/">
     <meta name="theme-color" content="#050507">
     <meta name="robots" content="index, follow">
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="YT to MP3 — YouTube to Audio Converter">
-    <meta property="og:description" content="Convert YouTube videos to MP3, AAC and OGG. Choose quality, trim audio, download instantly.">
+    <meta property="og:title" content="YT to MP3/MP4 — YouTube Converter">
+    <meta property="og:description" content="Convert YouTube videos to MP3, AAC, OGG and MP4. Choose quality, trim media, download instantly.">
     <meta property="og:url" content="https://yt2mp3.emilvooo.nl/">
     <meta property="og:site_name" content="YT to MP3">
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="YT to MP3 — YouTube to Audio Converter">
-    <meta name="twitter:description" content="Convert YouTube videos to MP3, AAC and OGG. Free, fast, no ads.">
+    <meta name="twitter:title" content="YT to MP3/MP4 — YouTube Converter">
+    <meta name="twitter:description" content="Convert YouTube videos to MP3, AAC, OGG and MP4. Free, fast, no ads.">
 
     <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%23ff3434'/><text x='50' y='72' font-size='55' font-weight='bold' font-family='sans-serif' text-anchor='middle' fill='white'>YT</text></svg>">
@@ -31,7 +31,7 @@
         "@type": "WebApplication",
         "name": "YT to MP3",
         "url": "https://yt2mp3.emilvooo.nl/",
-        "description": "Convert YouTube videos to high-quality MP3, AAC or OGG with custom bitrate and audio trimming.",
+        "description": "Convert YouTube videos to high-quality MP3, AAC, OGG or MP4 with trimming.",
         "applicationCategory": "MultimediaApplication",
         "operatingSystem": "Any",
         "offers": {
@@ -596,7 +596,7 @@
         <h1 class="logo anim-in">
             <span class="logo-yt">YT</span>
             <span class="logo-arrow">&rarr;</span>
-            <span class="logo-mp3">MP3</span>
+            <span class="logo-mp3">MP3/MP4</span>
         </h1>
         <p class="subtitle anim-in">paste &middot; convert &middot; download</p>
 
@@ -637,6 +637,7 @@
                         <option value="mp3" selected>MP3</option>
                         <option value="aac">AAC</option>
                         <option value="ogg">OGG</option>
+                        <option value="mp4">MP4</option>
                     </select>
                 </div>
             </div>
@@ -690,6 +691,7 @@
         const trimStart = document.getElementById('trimStart');
         const trimEnd = document.getElementById('trimEnd');
         const formatSelect = document.getElementById('formatSelect');
+        const bitrateGroup = document.getElementById('bitrateGroup');
         const bitratePills = document.getElementById('bitratePills');
 
         const YT_RE = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/)[\w-]{11}(\b|$)/;
@@ -706,13 +708,20 @@
         });
 
         formatSelect.addEventListener('change', () => {
+            updateFormatControls();
             updateBtnLabel();
         });
+
+        function updateFormatControls() {
+            bitrateGroup.style.display = formatSelect.value === 'mp4' ? 'none' : 'flex';
+        }
 
         function updateBtnLabel() {
             const fmt = formatSelect.value.toUpperCase();
             btn.childNodes[btn.childNodes.length - 1].textContent = ` Download ${fmt}`;
         }
+
+        updateFormatControls();
 
         let debounceTimer = null;
         urlInput.addEventListener('input', () => {
@@ -820,7 +829,8 @@
             showProgress(0, 'Starting...');
 
             try {
-                const body = { url, format: fmt, bitrate };
+                const body = { url, format: fmt };
+                if (fmt !== 'mp4') body.bitrate = bitrate;
                 if (start !== null) body.start = start;
                 if (end !== null) body.end = end;
 
