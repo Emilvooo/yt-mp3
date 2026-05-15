@@ -108,8 +108,8 @@
         /* Main card */
         .card {
             width: 100%;
-            max-width: 500px;
-            padding: 2.6rem 2rem 2rem;
+            max-width: 460px;
+            padding: 2.5rem 2rem 2rem;
             position: relative;
             z-index: 2;
             background: var(--surface);
@@ -141,20 +141,15 @@
         }
 
         /* Logo */
-        .hero {
-            margin-bottom: 1.8rem;
-        }
-
         .logo {
             font-family: 'Syne', sans-serif;
             font-weight: 800;
-            font-size: clamp(2.7rem, 10vw, 4.2rem);
-            line-height: 0.82;
-            letter-spacing: -0.07em;
+            font-size: 2.6rem;
+            letter-spacing: -0.04em;
             display: flex;
-            align-items: flex-start;
-            gap: 0.45rem;
-            margin-bottom: 0.85rem;
+            align-items: baseline;
+            gap: 0.35rem;
+            margin-bottom: 0.15rem;
         }
 
         .logo-yt { color: var(--accent); }
@@ -164,39 +159,21 @@
             color: var(--text-dim);
             font-weight: 400;
             position: relative;
-            top: 0.82rem;
-            letter-spacing: 0;
+            top: -2px;
         }
 
-        .logo-targets {
-            color: var(--text);
-            display: flex;
-            flex-direction: column;
-            gap: 0.08em;
-            position: relative;
-        }
+        .logo-target { color: var(--text); }
 
-        .logo-mp3,
-        .logo-mp4 {
-            display: block;
-        }
-
-        .logo-mp3::after {
-            content: '/';
-            color: var(--text);
-            display: inline-block;
-            margin-left: 0.08em;
-            transform: rotate(14deg) translateY(0.06em);
-            opacity: 0.9;
-        }
-
-        .logo-mp4 {
-            margin-left: 0.02em;
+        .logo-slash {
+            color: var(--text-dim);
+            font-weight: 500;
+            margin: 0 0.05em;
         }
 
         .subtitle {
             color: var(--text-dim);
             font-size: 0.72rem;
+            margin-bottom: 2rem;
             letter-spacing: 0.15em;
             text-transform: uppercase;
         }
@@ -328,8 +305,8 @@
         .options {
             display: none;
             flex-direction: column;
-            gap: 0.75rem;
-            margin-bottom: 0.85rem;
+            gap: 0.6rem;
+            margin-bottom: 0.75rem;
         }
 
         .options.active {
@@ -444,29 +421,8 @@
 
         .format-btn.active {
             color: #fff;
-            background: linear-gradient(135deg, var(--accent), #a91f25);
-            border-color: rgba(255, 255, 255, 0.16);
-            box-shadow: 0 8px 24px -14px var(--accent-glow-strong);
+            background: var(--accent);
         }
-
-        .format-btn[data-val="mp4"].active {
-            background: linear-gradient(135deg, #fff, #bfc3ca);
-            color: #09090c;
-            box-shadow: 0 10px 28px -16px rgba(255, 255, 255, 0.65);
-        }
-
-        .video-note {
-            display: none;
-            padding: 0.65rem 0.75rem;
-            color: rgba(234, 234, 234, 0.72);
-            background: linear-gradient(135deg, rgba(255, 52, 52, 0.1), rgba(255, 255, 255, 0.025));
-            border: 1px solid rgba(255, 52, 52, 0.18);
-            border-radius: var(--radius-sm);
-            font-size: 0.62rem;
-            line-height: 1.45;
-        }
-
-        .video-note.active { display: block; }
 
         /* Trim */
         .trim {
@@ -549,16 +505,6 @@
             opacity: 0.55;
             cursor: not-allowed;
             transform: none;
-        }
-
-        .dl-btn.video-mode {
-            background: linear-gradient(135deg, #f1f1f1, #9fa4ad);
-            color: #09090c;
-            box-shadow: 0 12px 44px -24px rgba(255, 255, 255, 0.55);
-        }
-
-        .dl-btn.video-mode:hover:not(:disabled) {
-            box-shadow: 0 14px 38px -16px rgba(255, 255, 255, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.28) inset;
         }
 
         .dl-btn svg {
@@ -672,36 +618,21 @@
         .progress-pct.success { color: #4ade80; }
 
         @media (max-width: 520px) {
-            body {
-                align-items: flex-start;
-            }
-
             .card {
                 padding: 2rem 1.1rem 1.4rem;
                 margin: 0.75rem;
             }
 
             .logo {
-                font-size: clamp(2.35rem, 14vw, 3.4rem);
+                font-size: 2.2rem;
             }
 
             .subtitle {
-                font-size: 0.62rem;
-                letter-spacing: 0.12em;
-            }
-
-            .options-controls {
-                flex-direction: column-reverse;
-                align-items: stretch;
-            }
-
-            .preview.active {
-                flex-direction: column;
+                margin-bottom: 1.5rem;
             }
 
             .preview-thumb {
-                width: 100%;
-                max-height: 180px;
+                width: 110px;
             }
         }
     </style>
@@ -710,17 +641,12 @@
     <div class="orb"></div>
 
     <div class="card">
-        <div class="hero anim-in">
-            <h1 class="logo">
-                <span class="logo-yt">YT</span>
-                <span class="logo-arrow">&rarr;</span>
-                <span class="logo-targets">
-                    <span class="logo-mp3">MP3</span>
-                    <span class="logo-mp4">MP4</span>
-                </span>
-            </h1>
-            <p class="subtitle">paste &middot; convert &middot; download</p>
-        </div>
+        <h1 class="logo anim-in">
+            <span class="logo-yt">YT</span>
+            <span class="logo-arrow">&rarr;</span>
+            <span class="logo-target">MP3<span class="logo-slash">/</span>MP4</span>
+        </h1>
+        <p class="subtitle anim-in">paste &middot; convert &middot; download</p>
 
         <div class="input-wrap anim-in">
             <input
@@ -763,7 +689,6 @@
                     </div>
                 </div>
             </div>
-            <div class="video-note" id="videoNote">MP4 downloads keep the original video track where possible. Pick a maximum resolution or use Best for the highest available quality.</div>
             <div class="opt-group video-quality-group" id="videoQualityGroup">
                 <span class="opt-label">Video quality</span>
                 <div class="seg" id="videoQualityPills">
@@ -823,7 +748,6 @@
         const trimStart = document.getElementById('trimStart');
         const trimEnd = document.getElementById('trimEnd');
         const formatSelect = document.getElementById('formatSelect');
-        const videoNote = document.getElementById('videoNote');
         const videoQualityGroup = document.getElementById('videoQualityGroup');
         const videoQualityPills = document.getElementById('videoQualityPills');
         const bitrateGroup = document.getElementById('bitrateGroup');
@@ -861,10 +785,9 @@
         });
 
         function updateFormatControls() {
-            bitrateGroup.style.display = selectedFormat === 'mp4' ? 'none' : 'flex';
-            videoNote.classList.toggle('active', selectedFormat === 'mp4');
-            videoQualityGroup.classList.toggle('active', selectedFormat === 'mp4');
-            btn.classList.toggle('video-mode', selectedFormat === 'mp4');
+            const isVideo = selectedFormat === 'mp4';
+            bitrateGroup.style.display = isVideo ? 'none' : 'flex';
+            videoQualityGroup.classList.toggle('active', isVideo);
         }
 
         function updateBtnLabel() {
