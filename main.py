@@ -26,7 +26,12 @@ PROGRESS_RE = re.compile(r"\[download\]\s+([\d.]+)%")
 OUT_TIME_RE = re.compile(r"out_time_ms=(\d+)")
 TASK_TTL = 300
 YTDLP_AUDIO_FORMAT = "bestaudio/best"
-YTDLP_VIDEO_FORMAT = "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best[ext=mp4]/best"
+YTDLP_VIDEO_FORMATS = {
+    "best": "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best[ext=mp4]/best",
+    "1080": "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/best[height<=1080]",
+    "720": "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]/best[height<=720]",
+    "480": "bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[height<=480][ext=mp4]/best[height<=480]",
+}
 YTDLP_CONCURRENT_FRAGMENTS = "4"
 
 tasks: dict[str, dict] = {}
@@ -141,6 +146,7 @@ async def info(url: str = ""):
 
 VALID_FORMATS = {"mp3", "aac", "ogg", "mp4"}
 VALID_BITRATES = {128, 192, 320}
+VALID_VIDEO_QUALITIES = set(YTDLP_VIDEO_FORMATS)
 FORMAT_MIME = {
     "mp3": "audio/mpeg",
     "aac": "audio/aac",
@@ -163,6 +169,9 @@ async def download(request: Request):
     bitrate = body.get("bitrate", 192)
     if bitrate not in VALID_BITRATES:
         bitrate = 192
+    video_quality = str(body.get("video_quality", "best")).lower()
+    if video_quality not in VALID_VIDEO_QUALITIES:
+        video_quality = "best"
     trim_start = body.get("start")
     trim_end = body.get("end")
 
@@ -181,7 +190,7 @@ async def download(request: Request):
         "created": time.time(),
     }
 
-    asyncio.create_task(_run_download(task_id, url, fmt, bitrate, trim_start, trim_end))
+    asyncio.create_task(_run_download(task_id, url, fmt, bitrate, video_quality, trim_start, trim_end))
     return JSONResponse({"task_id": task_id})
 
 
@@ -396,10 +405,10 @@ async def _download_audio_file(url: str, tmp_dir: str, task: dict) -> tuple[Path
     return audio_files[0], None
 
 
-async def _download_video_output(url: str, out_path: Path, task: dict) -> str | None:
+async def _download_video_output(url: str, out_path: Path, task: dict, video_quality: str) -> str | None:
     dl_proc = await asyncio.create_subprocess_exec(
         "yt-dlp",
-        "-f", YTDLP_VIDEO_FORMAT,
+        "-f", YTDLP_VIDEO_FORMATS[video_quality],
         "-N", YTDLP_CONCURRENT_FRAGMENTS,
         "--merge-output-format", "mp4",
         "--no-playlist",
@@ -429,11 +438,16 @@ async def _download_video_output(url: str, out_path: Path, task: dict) -> str | 
     return None
 
 
-async def _download_video_file(url: str, tmp_dir: str, task: dict) -> tuple[Path | None, str | None]:
+async def _download_video_file(
+    url: str,
+    tmp_dir: str,
+    task: dict,
+    video_quality: str,
+) -> tuple[Path | None, str | None]:
     output_template = os.path.join(tmp_dir, "source.%(ext)s")
     dl_proc = await asyncio.create_subprocess_exec(
         "yt-dlp",
-        "-f", YTDLP_VIDEO_FORMAT,
+        "-f", YTDLP_VIDEO_FORMATS[video_quality],
         "-N", YTDLP_CONCURRENT_FRAGMENTS,
         "--merge-output-format", "mp4",
         "--no-playlist",
@@ -589,7 +603,15 @@ async def _convert_from_stream(
     return None
 
 
-async def _run_video_download(task: dict, url: str, raw_title: str, duration_ms: int, trim_start, trim_end) -> None:
+async def _run_video_download(
+    task: dict,
+    url: str,
+    raw_title: str,
+    duration_ms: int,
+    video_quality: str,
+    trim_start,
+    trim_end,
+) -> None:
     display_title = raw_title or "video"
     effective_duration_ms = _effective_duration_ms(duration_ms, trim_start, trim_end)
     tmp_dir = task["tmp_dir"]
@@ -597,19 +619,19 @@ async def _run_video_download(task: dict, url: str, raw_title: str, duration_ms:
 
     if trim_start is None and trim_end is None:
         task["status"] = "downloading"
-        task["stage"] = "Downloading video..."
+        task["stage"] = f"Downloading video ({video_quality})..."
         task["progress"] = 0
-        download_error = await _download_video_output(url, out_path, task)
+        download_error = await _download_video_output(url, out_path, task, video_quality)
         if download_error:
             task["status"] = "error"
             task["error"] = f"Download failed: {download_error}"
             return
     else:
         task["status"] = "downloading"
-        task["stage"] = "Downloading video..."
+        task["stage"] = f"Downloading video ({video_quality})..."
         task["progress"] = 0
 
-        video_path, download_error = await _download_video_file(url, tmp_dir, task)
+        video_path, download_error = await _download_video_file(url, tmp_dir, task, video_quality)
         if download_error or video_path is None:
             task["status"] = "error"
             task["error"] = f"Download failed: {download_error}"
@@ -642,7 +664,15 @@ async def _run_video_download(task: dict, url: str, raw_title: str, duration_ms:
     task["artist"] = ""
 
 
-async def _run_download(task_id: str, url: str, fmt: str = "mp3", bitrate: int = 192, trim_start=None, trim_end=None):
+async def _run_download(
+    task_id: str,
+    url: str,
+    fmt: str = "mp3",
+    bitrate: int = 192,
+    video_quality: str = "best",
+    trim_start=None,
+    trim_end=None,
+):
     task = tasks[task_id]
     tmp_dir = tempfile.mkdtemp()
     task["tmp_dir"] = tmp_dir
@@ -656,7 +686,7 @@ async def _run_download(task_id: str, url: str, fmt: str = "mp3", bitrate: int =
         thumb_url = _pick_thumbnail_url(info)
 
         if fmt == "mp4":
-            await _run_video_download(task, url, raw_title, duration_ms, trim_start, trim_end)
+            await _run_video_download(task, url, raw_title, duration_ms, video_quality, trim_start, trim_end)
             return
 
         task["stage"] = "Parsing metadata..."
