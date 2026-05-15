@@ -140,41 +140,49 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Logo */
-        .logo {
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.7rem;
+        }
+
+        .hv1-mark {
             font-family: 'Syne', sans-serif;
             font-weight: 800;
-            font-size: 2.6rem;
-            letter-spacing: -0.04em;
+            font-size: 3.1rem;
+            letter-spacing: -0.06em;
+            color: var(--accent);
+            line-height: 0.85;
+        }
+
+        .hv1-divider {
+            width: 1px;
+            height: 2.4rem;
+            background: var(--border);
+        }
+
+        .hv1-meta {
             display: flex;
-            align-items: baseline;
-            gap: 0.35rem;
-            margin-bottom: 0.15rem;
+            flex-direction: column;
+            gap: 0.25rem;
         }
 
-        .logo-yt { color: var(--accent); }
-
-        .logo-arrow {
+        .hv1-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
             font-size: 1rem;
-            color: var(--text-dim);
-            font-weight: 400;
-            position: relative;
-            top: -2px;
+            color: var(--text);
+            letter-spacing: -0.01em;
+            text-transform: lowercase;
         }
 
-        .logo-target { color: var(--text); }
-
-        .logo-slash {
+        .hv1-sub {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
             color: var(--text-dim);
-            font-weight: 500;
-            margin: 0 0.05em;
-        }
-
-        .subtitle {
-            color: var(--text-dim);
-            font-size: 0.72rem;
-            margin-bottom: 2rem;
-            letter-spacing: 0.15em;
+            letter-spacing: 0.14em;
             text-transform: uppercase;
         }
 
@@ -391,38 +399,7 @@
         .seg-btn.active::after { display: none; }
         .seg-btn.active + .seg-btn::after { display: none; }
 
-        .format-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 0.35rem;
-            padding: 0.3rem;
-            background: var(--surface-solid);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-        }
-
-        .format-btn {
-            padding: 0.52rem 0.45rem;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.68rem;
-            font-weight: 500;
-            color: var(--text-dim);
-            background: transparent;
-            border: 1px solid transparent;
-            border-radius: 8px;
-            outline: none;
-            cursor: pointer;
-            transition: color 0.2s, background 0.2s, border-color 0.2s, box-shadow 0.2s;
-        }
-
-        .format-btn:hover {
-            color: var(--text);
-        }
-
-        .format-btn.active {
-            color: #fff;
-            background: var(--accent);
-        }
+        .seg.seg-fill .seg-btn { flex: 1; }
 
         /* Trim */
         .trim {
@@ -623,13 +600,7 @@
                 margin: 0.75rem;
             }
 
-            .logo {
-                font-size: 2.2rem;
-            }
-
-            .subtitle {
-                margin-bottom: 1.5rem;
-            }
+            .hv1-mark { font-size: 2.6rem; }
 
             .preview-thumb {
                 width: 110px;
@@ -641,12 +612,14 @@
     <div class="orb"></div>
 
     <div class="card">
-        <h1 class="logo anim-in">
-            <span class="logo-yt">YT</span>
-            <span class="logo-arrow">&rarr;</span>
-            <span class="logo-target">MP3<span class="logo-slash">/</span>MP4</span>
-        </h1>
-        <p class="subtitle anim-in">paste &middot; convert &middot; download</p>
+        <header class="header anim-in">
+            <span class="hv1-mark">YT</span>
+            <span class="hv1-divider"></span>
+            <div class="hv1-meta">
+                <span class="hv1-title">audio &amp; video</span>
+                <span class="hv1-sub">youtube converter</span>
+            </div>
+        </header>
 
         <div class="input-wrap anim-in">
             <input
@@ -681,11 +654,11 @@
                 </div>
                 <div class="opt-group format-group">
                     <span class="opt-label">Format</span>
-                    <div class="format-grid" id="formatSelect">
-                        <button class="format-btn active" data-val="mp3" type="button">MP3</button>
-                        <button class="format-btn" data-val="aac" type="button">AAC</button>
-                        <button class="format-btn" data-val="ogg" type="button">OGG</button>
-                        <button class="format-btn" data-val="mp4" type="button">MP4</button>
+                    <div class="seg seg-fill" id="formatSelect">
+                        <button class="seg-btn active" data-val="mp3" type="button">MP3</button>
+                        <button class="seg-btn" data-val="aac" type="button">AAC</button>
+                        <button class="seg-btn" data-val="ogg" type="button">OGG</button>
+                        <button class="seg-btn" data-val="mp4" type="button">MP4</button>
                     </div>
                 </div>
             </div>
@@ -775,10 +748,10 @@
         });
 
         formatSelect.addEventListener('click', e => {
-            const formatBtn = e.target.closest('.format-btn');
+            const formatBtn = e.target.closest('.seg-btn');
             if (!formatBtn) return;
             selectedFormat = formatBtn.dataset.val;
-            formatSelect.querySelectorAll('.format-btn').forEach(btn => btn.classList.remove('active'));
+            formatSelect.querySelectorAll('.seg-btn').forEach(btn => btn.classList.remove('active'));
             formatBtn.classList.add('active');
             updateFormatControls();
             updateBtnLabel();
