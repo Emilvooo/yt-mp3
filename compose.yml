@@ -5,5 +5,7 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    ports:
-      - "127.0.0.1:8910:8000"
+    environment:
+      YTDLP_FORCE_IPV6: "1"
+    network_mode: host
+    command: uvicorn main:app --host 127.0.0.1 --port 8910

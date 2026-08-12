@@ -33,6 +33,7 @@ YTDLP_VIDEO_FORMATS = {
     "480": "bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[height<=480][ext=mp4]/best[height<=480]",
 }
 YTDLP_CONCURRENT_FRAGMENTS = "4"
+YTDLP_NETWORK_ARGS = ("--force-ipv6",) if os.getenv("YTDLP_FORCE_IPV6") == "1" else ()
 
 tasks: dict[str, dict] = {}
 
@@ -49,7 +50,7 @@ async def index(request: Request):
 
 async def _fetch_video_info(url: str) -> dict:
     proc = await asyncio.create_subprocess_exec(
-        "yt-dlp", "-j", "--no-playlist", url,
+        "yt-dlp", *YTDLP_NETWORK_ARGS, "-j", "--no-playlist", url,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -91,6 +92,7 @@ async def _download_thumbnail_fallback(url: str, tmp_dir: str) -> Path | None:
     output_template = os.path.join(tmp_dir, "thumb.%(ext)s")
     proc = await asyncio.create_subprocess_exec(
         "yt-dlp",
+        *YTDLP_NETWORK_ARGS,
         "--skip-download",
         "--write-thumbnail",
         "--no-playlist",
@@ -376,6 +378,7 @@ async def _download_audio_file(url: str, tmp_dir: str, task: dict) -> tuple[Path
     output_template = os.path.join(tmp_dir, "%(title)s.%(ext)s")
     dl_proc = await asyncio.create_subprocess_exec(
         "yt-dlp",
+        *YTDLP_NETWORK_ARGS,
         "-f", YTDLP_AUDIO_FORMAT,
         "-N", YTDLP_CONCURRENT_FRAGMENTS,
         "--no-playlist",
@@ -408,6 +411,7 @@ async def _download_audio_file(url: str, tmp_dir: str, task: dict) -> tuple[Path
 async def _download_video_output(url: str, out_path: Path, task: dict, video_quality: str) -> str | None:
     dl_proc = await asyncio.create_subprocess_exec(
         "yt-dlp",
+        *YTDLP_NETWORK_ARGS,
         "-f", YTDLP_VIDEO_FORMATS[video_quality],
         "-N", YTDLP_CONCURRENT_FRAGMENTS,
         "--merge-output-format", "mp4",
@@ -447,6 +451,7 @@ async def _download_video_file(
     output_template = os.path.join(tmp_dir, "source.%(ext)s")
     dl_proc = await asyncio.create_subprocess_exec(
         "yt-dlp",
+        *YTDLP_NETWORK_ARGS,
         "-f", YTDLP_VIDEO_FORMATS[video_quality],
         "-N", YTDLP_CONCURRENT_FRAGMENTS,
         "--merge-output-format", "mp4",
@@ -568,6 +573,7 @@ async def _convert_from_stream(
 ) -> str | None:
     yt_proc = await asyncio.create_subprocess_exec(
         "yt-dlp",
+        *YTDLP_NETWORK_ARGS,
         "-f", YTDLP_AUDIO_FORMAT,
         "-N", YTDLP_CONCURRENT_FRAGMENTS,
         "--no-playlist",
